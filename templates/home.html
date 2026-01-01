@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h1>開始</h1>
+  <p class="hint">兩大模組：教學目標、教學記錄。各自可「新增」或「繼續未完成」。</p>
+  <p class="hint">
+    目前草稿儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
+    只有按「下載」才會生成 <code>.txt</code> 檔到你的下載資料夾。
+  </p>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>教學目標</h2>
+      <div class="btnrow">
+        <a class="btn" href="{{ url_for('new_module', module='objectives') }}">新增記錄</a>
+        <a class="btn btn-secondary" href="{{ url_for('continue_module', module='objectives') }}">繼續未完成</a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>教學記錄</h2>
+      <div class="btnrow">
+        <a class="btn" href="{{ url_for('new_module', module='records') }}">新增記錄</a>
+        <a class="btn btn-secondary" href="{{ url_for('continue_module', module='records') }}">繼續未完成</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>小提醒</h2>
+  <ul class="bullets">
+    <li>「新增記錄」會產生一組 6 位數代碼，請記下來。</li>
+    <li>之後用「繼續未完成」輸入代碼即可回到同一份草稿。</li>
+    <li>填完後按「下載」會拿到單一 <code>.txt</code> 檔（可直接貼到 Word/Excel）。</li>
+  </ul>
+</section>
+
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h1>繼續未完成</h1>
+  <p class="hint">請輸入你之前拿到的 6 位數代碼。</p>
+
+  <form method="post" class="form">
+    <label class="label" for="code">代碼</label>
+    <input id="code" name="code" class="input" inputmode="numeric" placeholder="例如：123456" required />
+
+    <div class="btnrow">
+      <button class="btn" type="submit">繼續</button>
+      <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

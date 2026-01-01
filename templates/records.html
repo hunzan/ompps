@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <div class="row-between">
+    <h1>教學記錄</h1>
+    <div class="badge">代碼：<strong>{{ code }}</strong></div>
+    <p class="hint">
+      草稿目前儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
+      下載後才會變成 <code>.txt</code> 檔在你的下載資料夾。
+    </p>
+  </div>
+
+  <div class="btnrow">
+    <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
+    <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載（同檔含目標+記錄）</a>
+    <a class="btn" href="{{ url_for('objectives', code=code) }}">← 去填教學目標</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2 class="h2">新增一次教學記錄</h2>
+
+  <form method="post" class="form">
+    <input type="hidden" name="action" value="add" />
+
+    <label class="label" for="teach_date">教學日期（年月日）</label>
+    <input id="teach_date" name="teach_date" class="input" type="date" value="{{ today }}" required />
+
+    <label class="label" for="teach_time">教學時間（例如：14:00-16:00）</label>
+    <input id="teach_time" name="teach_time" class="input" placeholder="14:00-16:00" required />
+
+    <label class="label" for="effectiveness">教學成效評估（多行）</label>
+    <textarea id="effectiveness" name="effectiveness" class="textarea" rows="5"
+      placeholder="今天做了什麼、學生反應、成功/卡關點、下次建議..."></textarea>
+
+    <div class="btnrow">
+      <button class="btn" type="submit">新增</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="h2">已新增的記錄（第1次～第N次）</h2>
+
+  {% if records %}
+    <div class="list">
+      {% for r in records %}
+        <div class="list-item">
+          <div class="list-head">
+            <div class="list-title">（暫編）第{{ loop.index }}次｜{{ r['teach_date'] }}｜{{ r['teach_time'] }}</div>
+            <form method="post" class="inline">
+              <input type="hidden" name="action" value="delete" />
+              <input type="hidden" name="rec_id" value="{{ r['id'] }}" />
+              <button class="btn btn-danger btn-small" type="submit">刪除</button>
+            </form>
+          </div>
+          <pre class="pre">{{ r['effectiveness'] }}</pre>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="hint">目前還沒有任何記錄。你可以先新增第1次。</p>
+  {% endif %}
+</section>
+
+{% endblock %}

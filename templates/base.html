@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OMpps｜OM記錄趴趴寫</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title">OMpps｜OM記錄趴趴寫</div>
+      <div class="brand-sub">手機填重點、回家貼 Word/Excel</div>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+    <div class="toast" role="status" aria-live="polite">
+      {% for msg in messages %}
+        <div class="toast-item">{{ msg }}</div>
+      {% endfor %}
+
+      {% if session.get('last_code') %}
+        <div class="toast-item toast-strong" id="codeToast">
+          <div class="toast-title">⚠️ 請記下你的 6 位代碼（用來「繼續未完成」）</div>
+          <div class="code-big" id="codeValue">{{ session.get('last_code') }}</div>
+          <div class="btnrow">
+            <button class="btn btn-secondary" type="button" id="copyCodeBtn">複製代碼</button>
+            <button class="btn btn-secondary" type="button" id="closeCodeBtn">我記下了</button>
+          </div>
+          <div class="hint">建議：貼到 LINE/記事本，或直接截圖存起來。</div>
+        </div>
+      {% endif %}
+    </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+    {% if session.get('last_code') and not session.get('code_ack') %}
+      <div class="modal-backdrop" role="presentation" aria-hidden="true"></div>
+
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="codeModalTitle">
+        <div class="modal-card">
+          <h2 id="codeModalTitle" class="modal-title">⚠️ 請先記下 6 位代碼</h2>
+          <p class="modal-desc">
+            這組代碼是你之後按「繼續未完成」找回草稿的唯一方式。
+          </p>
+
+          <div class="modal-code" id="codeValue">{{ session.get('last_code') }}</div>
+
+          <div class="btnrow">
+            <button class="btn btn-secondary" type="button" id="copyCodeBtn">複製代碼</button>
+            <button class="btn" type="button" id="ackCodeBtn">我已記下（才能繼續）</button>
+          </div>
+
+          <p class="hint">
+            建議：貼到 LINE/記事本，或直接截圖存起來。
+          </p>
+        </div>
+      </div>
+    {% endif %}
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

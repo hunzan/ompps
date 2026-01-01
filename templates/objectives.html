@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <div class="row-between">
+    <h1>教學目標</h1>
+    <div class="badge">代碼：<strong>{{ code }}</strong></div>
+    <p class="hint">
+      草稿目前儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
+      下載後才會變成 <code>.txt</code> 檔在你的下載資料夾。
+    </p>
+  </div>
+
+  <div class="btnrow">
+    <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
+    <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載（同檔含目標+記錄）</a>
+    <a class="btn" href="{{ url_for('records', code=code) }}">去填教學記錄 →</a>
+  </div>
+</section>
+
+<section class="card">
+  <form method="post" class="form" id="objForm">
+    <label class="label" for="target_date">訂定日期（年月日）</label>
+    <input id="target_date" name="target_date" class="input" type="date"
+           value="{{ obj['target_date'] if obj else '' }}" required />
+
+    <label class="label" for="teaching_goal">教學目標（文字）</label>
+    <textarea id="teaching_goal" name="teaching_goal" class="textarea" rows="4"
+      placeholder="例如：提升道路穿越安全判斷、建立手杖節奏...">{{ obj['teaching_goal'] if obj else '' }}</textarea>
+
+    <label class="label" for="category">教學類別</label>
+    <select id="category" name="category" class="select">
+      <option value="定向" {{ 'selected' if obj and obj['category']=='定向' else '' }}>定向</option>
+      <option value="生活" {{ 'selected' if obj and obj['category']=='生活' else '' }}>生活</option>
+    </select>
+
+    <hr class="hr"/>
+
+    <div class="row-between">
+      <h2 class="h2">長期目標（可多筆，每筆可加短期目標）</h2>
+      <button class="btn btn-small" type="button" id="addLongTermGroup">＋新增長期目標</button>
+    </div>
+
+    <div id="groups">
+      {% for g in groups %}
+        {% set idx = loop.index0 %}
+        <div class="group" data-idx="{{ idx }}">
+          <div class="row-between">
+            <div style="flex:1;">
+              <label class="label">長期目標</label>
+              <select class="select longTermSelect" name="long_term_goal_{{ idx }}"></select>
+            </div>
+            <button class="btn btn-danger btn-small" type="button" data-remove-group>刪除</button>
+          </div>
+
+          <div class="row-between" style="margin-top:10px;">
+            <div class="label">短期目標（本長期目標的子目標）</div>
+            <button class="btn btn-small" type="button" data-add-short>＋新增短期目標</button>
+          </div>
+
+          <div class="shortList">
+            {% set sts = st_map.get(g['id'], []) %}
+            {% if sts %}
+              {% for st in sts %}
+                <div class="repeat-row">
+                  <input class="input" name="short_term_{{ idx }}[]" value="{{ st['item'] }}" placeholder="短期目標內容" />
+                  <button class="btn btn-danger btn-small" type="button" data-remove-short>刪除</button>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="repeat-row">
+                <input class="input" name="short_term_{{ idx }}[]" value="" placeholder="短期目標內容" />
+                <button class="btn btn-danger btn-small" type="button" data-remove-short>刪除</button>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="hint" style="margin-top:6px;">群組會在匯出時變成「長期目標1/2/…」</div>
+          <hr class="hr"/>
+        </div>
+
+        <script>
+          window.OMpps = window.OMpps || {};
+          window.OMpps.groupInit = window.OMpps.groupInit || [];
+          window.OMpps.groupInit.push({ idx: {{ idx }}, longTerm: "{{ g['long_term_goal'] }}" });
+        </script>
+      {% endfor %}
+    </div>
+
+    <div class="btnrow">
+      <button class="btn" type="submit">儲存</button>
+      <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載</a>
+    </div>
+  </form>
+</section>
+
+<script>
+  window.OMpps = window.OMpps || {};
+  window.OMpps.initial = {
+    category: "{{ obj['category'] if obj else '定向' }}"
+  };
+</script>
+
+{% endblock %}
