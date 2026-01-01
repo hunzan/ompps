@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ompps
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    plan: free
