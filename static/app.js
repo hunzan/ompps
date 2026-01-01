@@ -27,6 +27,33 @@
     ]
   };
 
+  // ---- Theme (Light/Dark) ----
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("ompps_theme", theme);
+
+    const lightBtn = document.getElementById("themeLight");
+    const darkBtn = document.getElementById("themeDark");
+    if (lightBtn && darkBtn){
+      lightBtn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+      darkBtn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+    }
+  }
+
+  // 初次：優先用使用者上次選的；沒有就跟系統偏好
+  const saved = localStorage.getItem("ompps_theme");
+  if (saved === "light" || saved === "dark"){
+    applyTheme(saved);
+  } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches){
+    applyTheme("dark");
+  } else {
+    applyTheme("light");
+  }
+
+  // 綁定首頁按鈕（其他頁沒有也沒關係）
+  document.getElementById("themeLight")?.addEventListener("click", () => applyTheme("light"));
+  document.getElementById("themeDark")?.addEventListener("click", () => applyTheme("dark"));
+
   function fillSelect(selectEl, category, selectedValue){
     selectEl.innerHTML = "";
     const opts = LT[category] || LT["定向"];
@@ -174,13 +201,32 @@
   copyBtn?.addEventListener("click", async () => {
     const code = codeEl?.textContent?.trim() || "";
     if (!code) return;
+
+    // 方法一：標準 API（HTTPS / localhost OK）
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(code);
+        copyBtn.textContent = "已複製 ✅";
+        setTimeout(() => (copyBtn.textContent = "複製代碼"), 1200);
+        return;
+      } catch {}
+    }
+
+    // 方法二：fallback（任何瀏覽器都可）
+    const ta = document.createElement("textarea");
+    ta.value = code;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
     try {
-      await navigator.clipboard.writeText(code);
+      document.execCommand("copy");
       copyBtn.textContent = "已複製 ✅";
       setTimeout(() => (copyBtn.textContent = "複製代碼"), 1200);
     } catch {
-      alert("瀏覽器不允許自動複製，請手動選取代碼後複製。");
+      alert("請長按選取代碼後自行複製");
     }
+    document.body.removeChild(ta);
   });
 
   ackBtn?.addEventListener("click", async () => {
