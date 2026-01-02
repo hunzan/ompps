@@ -16,8 +16,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "ompps.db")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "ompps-dev-secret")  # 開發用
-
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
 
 # ---------- DB ----------
 def get_conn() -> sqlite3.Connection:
