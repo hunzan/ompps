@@ -108,13 +108,6 @@ def get_objectives(ws_id: int) -> sqlite3.Row | None:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM objectives WHERE workspace_id=?", (ws_id,)).fetchone()
 
-def get_short_terms(ws_id: int) -> list[sqlite3.Row]:
-    with get_conn() as conn:
-        return conn.execute(
-            "SELECT * FROM short_terms WHERE workspace_id=? ORDER BY ord ASC, id ASC",
-            (ws_id,)
-        ).fetchall()
-
 def get_records(ws_id: int) -> list[sqlite3.Row]:
     with get_conn() as conn:
         return conn.execute(
@@ -146,6 +139,8 @@ def get_short_terms_by_group_ids(group_ids: list[int]) -> dict[int, list[sqlite3
     for r in rows:
         out.setdefault(r["group_id"], []).append(r)
     return out
+
+init_db()
 
 # ---------- Routes ----------
 @app.route("/")
