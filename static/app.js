@@ -198,36 +198,27 @@
   const ackBtn = document.getElementById("ackCodeBtn");
   const codeEl = document.getElementById("codeValue");
 
-  copyBtn?.addEventListener("click", async () => {
-    const code = codeEl?.textContent?.trim() || "";
-    if (!code) return;
+    copyBtn?.addEventListener("click", () => {
+      const code = codeEl?.textContent?.trim() || "";
+      if (!code) return;
 
-    // 方法一：標準 API（HTTPS / localhost OK）
-    if (navigator.clipboard && window.isSecureContext) {
-      try {
-        await navigator.clipboard.writeText(code);
+      // 建立暫存 input 元素
+      const input = document.createElement("input");
+      input.value = code;
+      document.body.appendChild(input);
+      input.select();
+      input.setSelectionRange(0, 99999); // for mobile
+
+      const ok = document.execCommand("copy");
+      document.body.removeChild(input);
+
+      if (ok) {
         copyBtn.textContent = "已複製 ✅";
         setTimeout(() => (copyBtn.textContent = "複製代碼"), 1200);
-        return;
-      } catch {}
-    }
-
-    // 方法二：fallback（任何瀏覽器都可）
-    const ta = document.createElement("textarea");
-    ta.value = code;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-      copyBtn.textContent = "已複製 ✅";
-      setTimeout(() => (copyBtn.textContent = "複製代碼"), 1200);
-    } catch {
-      alert("請長按選取代碼後自行複製");
-    }
-    document.body.removeChild(ta);
-  });
+      } else {
+        alert("請長按代碼進行複製");
+      }
+    });
 
   ackBtn?.addEventListener("click", async () => {
     try {
