@@ -403,6 +403,19 @@ def ack_code():
     # session.pop("last_code", None)
     return jsonify({"ok": True})
 
+@app.post("/api/delete-workspace")
+def api_delete_workspace():
+    code = (request.form.get("code") or request.json.get("code") if request.is_json else "").strip()
+    if not code:
+        return jsonify({"ok": False, "error": "missing code"}), 400
+
+    with get_conn() as conn:
+        ws = conn.execute("SELECT id FROM workspaces WHERE code=?", (code,)).fetchone()
+        if not ws:
+            return jsonify({"ok": False, "error": "not found"}), 404
+
+        conn.execute("DELETE FROM workspaces WHERE id=?", (ws["id"],))
+    return jsonify({"ok": True})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

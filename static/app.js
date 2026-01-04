@@ -176,7 +176,7 @@
 
       <div class="row-between" style="margin-top:10px;">
         <div class="label">短期目標（本長期目標的子目標）</div>
-        <button class="btn btn-small" type="button" data-add-short>＋新增短期目標</button>
+        <button class="btn btn-small btn-short" type="button" data-add-short>＋新增短期目標</button>
       </div>
 
       <div class="shortList">
@@ -234,4 +234,96 @@
     }
   });
 })();
+// ---- After download modal (Step 3) ----
+(function(){
+  const downloadBtn = document.getElementById("downloadBtn");
+  if (!downloadBtn) return; // 不是每頁都有下載按鈕
 
+  const code = (downloadBtn.getAttribute("data-code") || "").trim();
+  const dlUrl = downloadBtn.getAttribute("data-download-url") || "";
+  const homeUrl = downloadBtn.getAttribute("data-home-url") || "/";
+
+  const backdrop = document.getElementById("afterDownloadBackdrop");
+  const modal = document.getElementById("afterDownloadModal");
+  const keepBtn = document.getElementById("keepAfterDownloadBtn");
+  const delBtn = document.getElementById("deleteAfterDownloadBtn");
+
+  function openModal(){
+    if (backdrop) backdrop.style.display = "block";
+    if (modal) modal.style.display = "grid";
+    delBtn?.focus();
+  }
+
+  function closeModal(){
+    if (backdrop) backdrop.style.display = "none";
+    if (modal) modal.style.display = "none";
+    downloadBtn.focus();
+  }
+
+    downloadBtn.addEventListener("click", async () => {
+      if (!dlUrl) return;
+
+      // 按鈕鎖定，避免連點重複下載
+      const oldText = downloadBtn.textContent;
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = "下載中…";
+
+      try{
+        const res = await fetch(dlUrl, { method: "GET" });
+        if (!res.ok) throw new Error("download failed");
+
+        // 嘗試從 Content-Disposition 抓檔名（抓不到就用預設）
+        let filename = "";
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i);
+        if (m && m[1]) filename = decodeURIComponent(m[1].replace(/"/g, "").trim());
+        if (!filename) filename = `OMpps_${code || "draft"}.txt`;
+
+        const blob = await res.blob();
+
+        // 觸發下載
+        const a = document.createElement("a");
+        const blobUrl = URL.createObjectURL(blob);
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+
+        // ✅ 下載成功後才詢問是否刪除
+        openModal();
+
+      }catch(e){
+        alert("下載失敗，請稍後再試。");
+      }finally{
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = oldText;
+      }
+    });
+
+  keepBtn?.addEventListener("click", closeModal);
+  backdrop?.addEventListener("click", closeModal);
+
+  delBtn?.addEventListener("click", async () => {
+    if (!code){
+      alert("找不到代碼，無法刪除。");
+      return;
+    }
+    try{
+      const res = await fetch("/api/delete-workspace", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ code })
+      });
+      if (res.ok){
+        alert("已刪除草稿 ✅");
+        window.location.href = homeUrl;
+      } else {
+        alert("刪除失敗，請稍後再試。");
+      }
+    }catch{
+      alert("網路/伺服器異常，請稍後再試。");
+    }
+  });
+})();

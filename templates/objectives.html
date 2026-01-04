@@ -5,10 +5,6 @@
   <div class="row-between">
     <h1>教學目標</h1>
     <div class="badge">代碼：<strong>{{ code }}</strong></div>
-    <p class="hint">
-      草稿目前儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
-      下載後才會變成 <code>.txt</code> 檔在你的下載資料夾。
-    </p>
   </div>
 
   <div class="btnrow">
@@ -38,7 +34,7 @@
 
     <div class="row-between">
       <h2 class="h2">長期目標（可多筆，每筆可加短期目標）</h2>
-      <button class="btn btn-small" type="button" id="addLongTermGroup">＋新增長期目標</button>
+      <button class="btn btn-small btn-long" type="button" id="addLongTermGroup">＋新增長期目標</button>
     </div>
 
     <div id="groups">
@@ -55,7 +51,7 @@
 
           <div class="row-between" style="margin-top:10px;">
             <div class="label">短期目標（本長期目標的子目標）</div>
-            <button class="btn btn-small" type="button" data-add-short>＋新增短期目標</button>
+            <button class="btn btn-small btn-short" type="button" data-add-short>＋新增短期目標</button>
           </div>
 
           <div class="shortList">
@@ -89,7 +85,14 @@
 
     <div class="btnrow">
       <button class="btn" type="submit">儲存</button>
-      <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載</a>
+    <button class="btn btn-secondary"
+            type="button"
+            id="downloadBtn"
+            data-code="{{ code }}"
+            data-download-url="{{ url_for('export', code=code) }}"
+            data-home-url="{{ url_for('home') }}">
+      下載（同檔含目標+記錄）
+    </button>
     </div>
   </form>
 </section>
@@ -100,5 +103,27 @@
     category: "{{ obj['category'] if obj else '定向' }}"
   };
 </script>
+<!-- 下載後詢問是否刪除草稿（Step 3） -->
+<div id="afterDownloadBackdrop" class="modal-backdrop" style="display:none;"></div>
+
+<div id="afterDownloadModal"
+     class="modal"
+     style="display:none;"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="afterDownloadTitle">
+
+  <div class="modal-card">
+    <div class="toast-title" id="afterDownloadTitle">已下載完成 ✅</div>
+    <p class="modal-desc">要刪除這份草稿嗎？（可避免雲端暫存越來越多）</p>
+
+    <div class="btnrow">
+      <button class="btn btn-danger" type="button" id="deleteAfterDownloadBtn">刪除草稿</button>
+      <button class="btn btn-secondary" type="button" id="keepAfterDownloadBtn">先保留</button>
+    </div>
+
+    <p class="hint" style="margin-top:10px;">代碼：<code id="afterDownloadCode">{{ code }}</code></p>
+  </div>
+</div>
 
 {% endblock %}

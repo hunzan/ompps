@@ -334,3 +334,79 @@ code{ background: #f3f3f3; padding: 0 6px; border-radius: 6px; }
   outline: 2px solid var(--btn2-border);
   outline-offset: 2px;
 }
+/* White panel inside dark theme: keep text readable */
+.white-panel{
+  background: #fff !important;
+  color: #111 !important;
+}
+
+.white-panel *{
+  color: inherit !important;
+}
+/* ================================
+   Dark theme: white-surface text fix
+   ================================ */
+
+/* 所有「白底」元件，在夜間模式強制黑字，避免白底+淺灰字看不清 */
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] .toast-item,
+html[data-theme="dark"] .toast-strong,
+html[data-theme="dark"] .code-big,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .modal-code{
+  color: #111 !important;
+}
+
+/* 白底元件內部若有 span/strong/code 也一併繼承黑字 */
+html[data-theme="dark"] .badge *,
+html[data-theme="dark"] .toast-item *,
+html[data-theme="dark"] .toast-strong *,
+html[data-theme="dark"] .code-big *,
+html[data-theme="dark"] .modal-card *,
+html[data-theme="dark"] .modal-code *{
+  color: inherit !important;
+}
+
+/* 夜間模式下，內嵌 code 原本是淺底，文字也要黑，避免看不清 */
+html[data-theme="dark"] code{
+  color: #111;
+}
+
+/* ---- 可選：如果你希望「輸入框在夜間也固定白底黑字」就打開下面兩行 ---- */
+html[data-theme="dark"] .input,
+html[data-theme="dark"] .select,
+html[data-theme="dark"] .textarea{
+  background: #fff !important;
+  color: #111 !important;
+}
+/* Fix: dark theme modal buttons readability */
+html[data-theme="dark"] .modal-card .btn{
+  background: #111 !important;   /* 黑底 */
+  color: #fff !important;        /* 白字 */
+  border-color: #111 !important;
+}
+
+html[data-theme="dark"] .modal-card .btn-secondary{
+  background: #1b1b1b !important; /* 次要按鈕略淺一點 */
+  color: #fff !important;
+  border-color: #f2f2f2 !important;
+}
+/* Add buttons: long-term vs short-term */
+.btn-long{
+  background: #222 !important;
+  color: #fff !important;
+  border-color: #222 !important;
+}
+
+.btn-short{
+  background: #e8f1ff !important;
+  color: #003a8c !important;
+  border-color: #7aa8ff !important;
+}
+
+/* Dark mode tuning for short-term button */
+html[data-theme="dark"] .btn-short{
+  background: #1f2b45 !important;
+  color: #cfe2ff !important;
+  border-color: #6b9bff !important;
+}

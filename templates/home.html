@@ -9,16 +9,16 @@
     <div class="hint" style="margin:0;">日 / 夜間模式</div>
   </div>
   <p class="hint">兩大模組：教學目標、教學記錄。各自可「新增」或「繼續未完成」。</p>
-  <p class="hint">
-    目前草稿儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
-    只有按「下載」才會生成 <code>.txt</code> 檔到你的下載資料夾。
-  </p>
+    <p class="hint">
+      你填寫的內容會先安全儲存在 <strong>OMpps 雲端系統</strong>中（不是存在手機裡，也不用開家中電腦）。
+      只有按「下載」時，才會產生 <code>.txt</code> 檔存到你的裝置下載資料夾。
+    </p>
 
   <div class="grid2">
     <div class="panel">
       <h2>教學目標</h2>
       <div class="btnrow">
-        <a class="btn" href="{{ url_for('new_module', module='objectives') }}">新增記錄</a>
+        <a class="btn" href="{{ url_for('new_module', module='objectives') }}">新增目標</a>
         <a class="btn btn-secondary" href="{{ url_for('continue_module', module='objectives') }}">繼續未完成</a>
       </div>
     </div>

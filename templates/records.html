@@ -5,15 +5,18 @@
   <div class="row-between">
     <h1>教學記錄</h1>
     <div class="badge">代碼：<strong>{{ code }}</strong></div>
-    <p class="hint">
-      草稿目前儲存在：<strong>跑 OMpps 的那台電腦</strong>（本機資料庫 <code>ompps.db</code>）。
-      下載後才會變成 <code>.txt</code> 檔在你的下載資料夾。
-    </p>
   </div>
 
   <div class="btnrow">
     <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
-    <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載（同檔含目標+記錄）</a>
+  <button class="btn btn-secondary"
+          type="button"
+          id="downloadBtn"
+          data-code="{{ code }}"
+          data-download-url="{{ url_for('export', code=code) }}"
+          data-home-url="{{ url_for('home') }}">
+    下載（同檔含目標+記錄）
+  </button>
     <a class="btn" href="{{ url_for('objectives', code=code) }}">← 去填教學目標</a>
   </div>
 </section>
@@ -63,5 +66,27 @@
     <p class="hint">目前還沒有任何記錄。你可以先新增第1次。</p>
   {% endif %}
 </section>
+<!-- 下載後詢問是否刪除草稿（Step 3） -->
+<div id="afterDownloadBackdrop" class="modal-backdrop" style="display:none;"></div>
+
+<div id="afterDownloadModal"
+     class="modal"
+     style="display:none;"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="afterDownloadTitle">
+
+  <div class="modal-card">
+    <div class="toast-title" id="afterDownloadTitle">已下載完成 ✅</div>
+    <p class="modal-desc">要刪除這份草稿嗎？（可避免雲端暫存越來越多）</p>
+
+    <div class="btnrow">
+      <button class="btn btn-danger" type="button" id="deleteAfterDownloadBtn">刪除草稿</button>
+      <button class="btn btn-secondary" type="button" id="keepAfterDownloadBtn">先保留</button>
+    </div>
+
+    <p class="hint" style="margin-top:10px;">代碼：<code id="afterDownloadCode">{{ code }}</code></p>
+  </div>
+</div>
 
 {% endblock %}
