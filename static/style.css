@@ -88,7 +88,7 @@ h1{ font-size: 20px; margin: 0 0 10px; }
 .h2{ font-size: 16px; margin: 0 0 10px; }
 p{ margin: 8px 0; }
 
-.hint{ color: var(--muted); font-size: 14px; line-height: 1.5; }
+.hint{ color: var(--muted); font-size: 16px; line-height: 1.5; }
 
 .grid2{
   display: grid;
@@ -409,4 +409,21 @@ html[data-theme="dark"] .btn-short{
   background: #1f2b45 !important;
   color: #cfe2ff !important;
   border-color: #6b9bff !important;
+}
+/* Primary button: always readable */
+.btn-primary{
+  background: #222 !important;
+  color: #fff !important;
+  border-color: #222 !important;
+}
+
+/* Dark theme: keep primary readable */
+html[data-theme="dark"] .btn-primary{
+  background: #f2f2f2 !important;
+  color: #121212 !important;
+  border-color: #f2f2f2 !important;
+}
+/* Fix: close/ack button text in dark mode (avoid black on black) */
+html[data-theme="dark"] #closeCodeBtn{
+  color: #fff !important;
 }

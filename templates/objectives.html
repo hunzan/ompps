@@ -9,7 +9,14 @@
 
   <div class="btnrow">
     <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
-    <a class="btn btn-secondary" href="{{ url_for('export', code=code) }}">下載（同檔含目標+記錄）</a>
+    <button class="btn btn-secondary"
+        type="button"
+        id="downloadBtn"
+        data-code="{{ code }}"
+        data-download-url="{{ url_for('export', code=code) }}"
+        data-home-url="{{ url_for('home') }}">
+      下載（同檔含目標+記錄）
+    </button>
     <a class="btn" href="{{ url_for('records', code=code) }}">去填教學記錄 →</a>
   </div>
 </section>
@@ -85,14 +92,6 @@
 
     <div class="btnrow">
       <button class="btn" type="submit">儲存</button>
-    <button class="btn btn-secondary"
-            type="button"
-            id="downloadBtn"
-            data-code="{{ code }}"
-            data-download-url="{{ url_for('export', code=code) }}"
-            data-home-url="{{ url_for('home') }}">
-      下載（同檔含目標+記錄）
-    </button>
     </div>
   </form>
 </section>
