@@ -2,7 +2,7 @@
 {% block content %}
 
 <section class="card">
-  <h1>開始</h1>
+  <h1>請選擇顯示模式</h1>
   <div class="theme-toggle" style="margin: 10px 0 6px;">
     <button class="icon-btn" id="themeLight" type="button" aria-pressed="false" aria-label="日間模式">☀️</button>
     <button class="icon-btn" id="themeDark" type="button" aria-pressed="false" aria-label="夜間模式">🌙</button>
@@ -16,7 +16,7 @@
 
   <div class="grid2">
     <div class="panel">
-      <h2>教學目標</h2>
+      <h2>🎯 教學目標</h2>
       <div class="btnrow">
         <a class="btn" href="{{ url_for('new_module', module='objectives') }}">新增目標</a>
         <a class="btn btn-secondary" href="{{ url_for('continue_module', module='objectives') }}">繼續未完成</a>
@@ -24,7 +24,7 @@
     </div>
 
     <div class="panel">
-      <h2>教學記錄</h2>
+      <h2>📝 教學記錄</h2>
       <div class="btnrow">
         <a class="btn" href="{{ url_for('new_module', module='records') }}">新增記錄</a>
         <a class="btn btn-secondary" href="{{ url_for('continue_module', module='records') }}">繼續未完成</a>
