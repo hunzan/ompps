@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from io import BytesIO
 from secrets import randbelow
+from urllib.parse import quote
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -34,7 +35,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS workspaces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code TEXT UNIQUE NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                student_name TEXT
             );
 
             CREATE TABLE IF NOT EXISTS objectives (
@@ -72,6 +74,11 @@ def init_db() -> None:
             );
             """
         )
+        # 對已存在的舊資料庫做欄位升級
+        try:
+            conn.execute("ALTER TABLE workspaces ADD COLUMN student_name TEXT;")
+        except sqlite3.OperationalError:
+            pass  # 欄位已存在就略過
 
 def now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -86,19 +93,17 @@ def make_code() -> str:
     return f"{randbelow(1_000_000):06d}"
 
 
-def create_workspace() -> sqlite3.Row:
+def create_workspace(student_name: str | None = None) -> sqlite3.Row:
     with get_conn() as conn:
         code = make_code()
-        # 避免碰撞
         while conn.execute("SELECT 1 FROM workspaces WHERE code=?", (code,)).fetchone():
             code = make_code()
 
         conn.execute(
-            "INSERT INTO workspaces(code, created_at) VALUES(?, ?)",
-            (code, now_iso())
+            "INSERT INTO workspaces(code, created_at, student_name) VALUES(?, ?, ?)",
+            (code, now_iso(), (student_name or "").strip() or None)
         )
-        ws = conn.execute("SELECT * FROM workspaces WHERE code=?", (code,)).fetchone()
-        return ws
+        return conn.execute("SELECT * FROM workspaces WHERE code=?", (code,)).fetchone()
 
 def get_workspace_by_code(code: str) -> sqlite3.Row | None:
     with get_conn() as conn:
@@ -333,28 +338,46 @@ def records(code: str):
 
 
 def build_export_text(ws_id: int) -> str:
+    obj = get_objectives(ws_id)  # ✅ 把 objectives 抓出來
     groups = get_long_term_groups(ws_id)
     st_map = get_short_terms_by_group_ids([g["id"] for g in groups])
     recs = get_records(ws_id)
 
     lines: list[str] = []
 
-    # 教學目標
-    lines.append("教學目標：")
+    # ===== 教學目標 =====
+    lines.append("【教學目標】")
+
+    # (A) 目標基本資料（日期/類別/文字）
+    if obj:
+        # 你 objectives 表裡欄位是 target_date / category / teaching_goal
+        lines.append(f"訂定日期：{obj['target_date']}")
+        lines.append(f"類別：{obj['category']}")
+        lines.append("教學目標：")
+        lines.append(obj["teaching_goal"] or "（未填）")
+    else:
+        lines.append("（尚未填寫教學目標基本資料）")
+
+    lines.append("")  # 空行分隔
+
+    # (B) 長期/短期目標群組
+    lines.append("長期目標與短期目標：")
     if groups:
         for i, g in enumerate(groups, start=1):
             lines.append(f"長期目標{i}. {g['long_term_goal']}")
             sts = st_map.get(g["id"], [])
             if sts:
                 for j, st in enumerate(sts, start=1):
-                    lines.append(f"  短期目標{j}. {st['item']}")
+                    # ✅ 你要的格式：只留數字，不要「短期目標」四字
+                    lines.append(f"  {j}. {st['item']}")
             else:
                 lines.append("  （未填短期目標）")
             lines.append("")
     else:
-        lines.append("（未填）")
+        lines.append("（未填長期/短期目標）")
+        lines.append("")
 
-    # 教學記錄
+    # ===== 教學記錄 =====
     lines.append("【教學記錄】")
     if not recs:
         lines.append("（尚未新增）")
@@ -367,10 +390,8 @@ def build_export_text(ws_id: int) -> str:
             lines.append(r["effectiveness"] or "")
             lines.append("")  # 分隔
 
-    # 收尾空行
     lines.append("")
     return "\n".join(lines)
-
 
 @app.route("/export/<code>")
 def export(code: str):
@@ -384,7 +405,9 @@ def export(code: str):
     date_for_name = obj["target_date"] if obj else today_ymd()
     ymd = date_for_name.replace("-", "")
 
-    filename = f"{ymd}_教學記錄_代碼{ws['code']}.txt"
+    student = safe_name(ws["student_name"] or "未填姓名")
+    filename = f"{ymd}_{student}_{ws['code']}.txt"
+    
     text = build_export_text(ws_id).encode("utf-8-sig")  # utf-8-sig 讓 Windows 記事本不亂碼
 
     return send_file(
@@ -393,6 +416,10 @@ def export(code: str):
         download_name=filename,
         mimetype="text/plain; charset=utf-8"
     )
+
+def safe_name(s: str) -> str:
+    # 讓檔名乾淨（把不適合的字元換掉）
+    return "".join(ch if ch.isalnum() or ch in " _-." or "\u4e00" <= ch <= "\u9fff" else "_" for ch in s).strip() or "未填姓名"
 
 @app.route("/ack-code", methods=["POST"])
 def ack_code():
