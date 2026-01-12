@@ -12,6 +12,14 @@
       <div class="brand-title">OMpps｜OM記錄趴趴寫</div>
       <div class="brand-sub">手機填重點、回家貼 Word/Excel</div>
     </div>
+
+    {% if ws %}
+      <div class="badge" style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+        <div><strong>{{ ws["student_name"] or "未填姓名" }}</strong></div>
+        <div style="font-size:13px; color: var(--muted);">{{ ws["agency"] or "未填單位" }}</div>
+        <div style="font-size:13px;">代碼：<strong>{{ ws["code"] }}</strong></div>
+      </div>
+    {% endif %}
   </header>
 
   <main class="container">
@@ -22,17 +30,12 @@
         <div class="toast-item">{{ msg }}</div>
       {% endfor %}
 
-      {% if session.get('last_code') %}
-        <div class="toast-item toast-strong" id="codeToast">
-          <div class="toast-title">⚠️ 請記下你的 6 位代碼（用來「繼續未完成」）</div>
-          <div class="code-big" id="codeValue">{{ session.get('last_code') }}</div>
-          <div class="btnrow">
-            <button class="btn btn-primary" type="submit">繼續</button>
-            <button class="btn btn-secondary" type="button" id="closeCodeBtn">我記下了</button>
-          </div>
-          <div class="hint">建議：貼到 LINE/記事本，或直接截圖存起來。</div>
-        </div>
-      {% endif %}
+    {% if session.get('last_code') %}
+      <div class="toast-item">
+        已建立新草稿，請記下 6 位代碼（畫面會跳出提示框）。
+      </div>
+    {% endif %}
+
     </div>
       {% endif %}
     {% endwith %}
@@ -46,7 +49,7 @@
         <div class="modal-card">
           <h2 id="codeModalTitle" class="modal-title">⚠️ 請先記下 6 位代碼</h2>
           <p class="modal-desc">
-            這組代碼是你之後按「繼續未完成」找回草稿的唯一方式。
+            這組代碼是你之後按「繼續未完成」找回草稿的通關密碼。
           </p>
 
           <div class="modal-code" id="codeValue">{{ session.get('last_code') }}</div>

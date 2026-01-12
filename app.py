@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from secrets import randbelow
 from urllib.parse import quote
@@ -16,6 +16,8 @@ from flask import (
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "ompps.db")
 
+RETENTION_DAYS = 60
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
 
@@ -23,33 +25,109 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
 def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+def migrate_objectives_table(conn: sqlite3.Connection) -> None:
+
+    # 0️⃣ workspaces 不存在就別搬（防爆）
+    ws_tbl = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='workspaces';"
+    ).fetchone()
+    if not ws_tbl:
+        return
+
+    # 1️⃣ objectives 不存在就不用搬
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='objectives';"
+    ).fetchone()
+    if not row:
+        return
+
+    cols = conn.execute("PRAGMA table_info(objectives);").fetchall()
+    col_names = {c["name"] for c in cols}
+
+    # 判斷是否已經是「複合主鍵」新版：
+    # SQLite composite PK 會讓 pk 欄位出現 1,2,...（>=2 代表複合）
+    pk_count = sum(1 for c in cols if int(c["pk"]) > 0)
+    if pk_count >= 2:
+        return  # 已是新版，不搬
+
+    # 舊版通常 workspace_id 是唯一主鍵（pk_count==1 且 workspace_id pk==1）
+    ws_pk = next((c for c in cols if c["name"] == "workspace_id"), None)
+    if not ws_pk or int(ws_pk["pk"]) != 1:
+        return  # 不是我們認得的舊版結構，就別亂搬
+
+    # 這些欄位舊版應該會有（教學日期/文字）
+    if "target_date" not in col_names or "teaching_goal" not in col_names:
+        return
+
+    # 舊版可能沒有 category 欄位，沒有就補預設 '定向'
+    has_category = "category" in col_names
+
+    # 建新表（用 tmp 名，避免重複搬表）
+    conn.executescript("""
+    DROP TABLE IF EXISTS objectives_new_tmp;
+
+    CREATE TABLE objectives_new_tmp (
+      workspace_id INTEGER NOT NULL,
+      category TEXT NOT NULL,
+      target_date TEXT NOT NULL,
+      teaching_goal TEXT NOT NULL,
+      PRIMARY KEY (workspace_id, category),
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    """)
+
+    if has_category:
+        conn.execute("""
+          INSERT OR REPLACE INTO objectives_new_tmp(workspace_id, category, target_date, teaching_goal)
+          SELECT o.workspace_id, o.category, o.target_date, o.teaching_goal
+          FROM objectives o
+          JOIN workspaces w ON w.id = o.workspace_id
+        """)
+    else:
+        conn.execute("""
+          INSERT OR REPLACE INTO objectives_new_tmp(workspace_id, category, target_date, teaching_goal)
+          SELECT o.workspace_id, '定向', o.target_date, o.teaching_goal
+          FROM objectives o
+          JOIN workspaces w ON w.id = o.workspace_id
+        """)
+
+    # 換表
+    conn.executescript("""
+    DROP TABLE objectives;
+    ALTER TABLE objectives_new_tmp RENAME TO objectives;
+    """)
 
 def init_db() -> None:
     with get_conn() as conn:
+        # SQLite foreign_keys 是連線層級
+        conn.execute("PRAGMA foreign_keys = ON;")
+
+        # 1) 建表（新裝/空 DB 會直接用這套）
         conn.executescript(
             """
-            PRAGMA foreign_keys = ON;
-
             CREATE TABLE IF NOT EXISTS workspaces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code TEXT UNIQUE NOT NULL,
-                created_at TEXT NOT NULL,
-                student_name TEXT
+                created_at TEXT NOT NULL
             );
 
+            -- objectives： (workspace_id, category) 複合主鍵
             CREATE TABLE IF NOT EXISTS objectives (
-                workspace_id INTEGER PRIMARY KEY,
-                target_date TEXT NOT NULL,
-                teaching_goal TEXT NOT NULL,
-                category TEXT NOT NULL,              -- "定向" or "生活"
-                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+              workspace_id INTEGER NOT NULL,
+              category TEXT NOT NULL,
+              target_date TEXT NOT NULL,
+              teaching_goal TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, category),
+              FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS long_term_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workspace_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
                 long_term_goal TEXT NOT NULL,
                 ord INTEGER NOT NULL,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
@@ -66,6 +144,7 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workspace_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
                 teach_date TEXT NOT NULL,
                 teach_time TEXT NOT NULL,
                 effectiveness TEXT NOT NULL,
@@ -74,11 +153,55 @@ def init_db() -> None:
             );
             """
         )
-        # 對已存在的舊資料庫做欄位升級
+
+        # 2) workspaces：安全升級補欄位
+        for sql in [
+            "ALTER TABLE workspaces ADD COLUMN student_name TEXT;",
+            "ALTER TABLE workspaces ADD COLUMN agency TEXT;",
+            "ALTER TABLE workspaces ADD COLUMN updated_at TEXT;",
+        ]:
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
+
+        # 3) 舊 DB：long_term_groups / records 補 category 欄位（最穩：先允許 NULL）
+        for sql in [
+            "ALTER TABLE long_term_groups ADD COLUMN category TEXT;",
+            "ALTER TABLE records ADD COLUMN category TEXT;",
+        ]:
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
+
+        # 4) 補舊資料預設值（避免查不到）
+        conn.execute("UPDATE long_term_groups SET category='定向' WHERE category IS NULL OR category='';")
+        conn.execute("UPDATE records SET category='定向' WHERE category IS NULL OR category='';")
+
+        # 5) UNIQUE：避免同一學員+單位重複建檔
         try:
-            conn.execute("ALTER TABLE workspaces ADD COLUMN student_name TEXT;")
+            conn.execute("CREATE UNIQUE INDEX ux_student_agency ON workspaces(student_name, agency);")
         except sqlite3.OperationalError:
-            pass  # 欄位已存在就略過
+            pass
+
+        # 6) objectives 搬表（舊版 workspace_id 單一 PK 那種）
+        #    搬表會牽涉 FK：最穩做法是搬表時暫關 FK
+        conn.execute("PRAGMA foreign_keys = OFF;")
+        try:
+            migrate_objectives_table(conn)
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON;")
+
+        for sql in [
+            "CREATE INDEX IF NOT EXISTS ix_objectives_ws_cat ON objectives(workspace_id, category);",
+            "CREATE INDEX IF NOT EXISTS ix_groups_ws_cat ON long_term_groups(workspace_id, category, ord);",
+            "CREATE INDEX IF NOT EXISTS ix_records_ws_cat ON records(workspace_id, category, created_at);",
+        ]:
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
 
 def now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -93,38 +216,76 @@ def make_code() -> str:
     return f"{randbelow(1_000_000):06d}"
 
 
-def create_workspace(student_name: str | None = None) -> sqlite3.Row:
+def find_workspace_by_student(student_name: str, agency: str) -> sqlite3.Row | None:
+    sn = (student_name or "").strip()
+    ag = (agency or "").strip()
+    if not sn or not ag:
+        return None
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM workspaces WHERE student_name=? AND agency=? ORDER BY id DESC LIMIT 1",
+            (sn, ag)
+        ).fetchone()
+
+
+def create_workspace(student_name: str, agency: str) -> sqlite3.Row:
+    sn = (student_name or "").strip()
+    ag = (agency or "").strip()
+    if not sn or not ag:
+        raise ValueError("student_name/agency required")
+
     with get_conn() as conn:
         code = make_code()
         while conn.execute("SELECT 1 FROM workspaces WHERE code=?", (code,)).fetchone():
             code = make_code()
 
         conn.execute(
-            "INSERT INTO workspaces(code, created_at, student_name) VALUES(?, ?, ?)",
-            (code, now_iso(), (student_name or "").strip() or None)
+            "INSERT INTO workspaces(code, created_at, updated_at, student_name, agency) VALUES(?, ?, ?, ?, ?)",
+            (code, now_iso(), now_iso(), sn, ag)
         )
-        return conn.execute("SELECT * FROM workspaces WHERE code=?", (code,)).fetchone()
+        ws = conn.execute("SELECT * FROM workspaces WHERE code=?", (code,)).fetchone()
+        return ws
 
 def get_workspace_by_code(code: str) -> sqlite3.Row | None:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM workspaces WHERE code=?", (code,)).fetchone()
 
-def get_objectives(ws_id: int) -> sqlite3.Row | None:
-    with get_conn() as conn:
-        return conn.execute("SELECT * FROM objectives WHERE workspace_id=?", (ws_id,)).fetchone()
+def norm_cat(category: str) -> str:
+    c = (category or "").strip()
+    return c if c in ("定向", "生活") else "定向"
 
-def get_records(ws_id: int) -> list[sqlite3.Row]:
+def get_objectives(ws_id: int, category: str) -> sqlite3.Row | None:
+    cat = norm_cat(category)
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM records WHERE workspace_id=? ORDER BY created_at ASC, id ASC",
-            (ws_id,)
+            "SELECT * FROM objectives WHERE workspace_id=? AND category=?",
+            (ws_id, cat)
+        ).fetchone()
+
+
+def get_records(ws_id: int, category: str) -> list[sqlite3.Row]:
+    cat = norm_cat(category)
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM records
+            WHERE workspace_id=? AND category=?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (ws_id, cat)
         ).fetchall()
 
-def get_long_term_groups(ws_id: int) -> list[sqlite3.Row]:
+
+def get_long_term_groups(ws_id: int, category: str) -> list[sqlite3.Row]:
+    cat = norm_cat(category)
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM long_term_groups WHERE workspace_id=? ORDER BY ord ASC, id ASC",
-            (ws_id,)
+            """
+            SELECT * FROM long_term_groups
+            WHERE workspace_id=? AND category=?
+            ORDER BY ord ASC, id ASC
+            """,
+            (ws_id, cat)
         ).fetchall()
 
 def get_short_terms_by_group_ids(group_ids: list[int]) -> dict[int, list[sqlite3.Row]]:
@@ -145,6 +306,40 @@ def get_short_terms_by_group_ids(group_ids: list[int]) -> dict[int, list[sqlite3
         out.setdefault(r["group_id"], []).append(r)
     return out
 
+def init_workspace_defaults(ws_id: int) -> None:
+    """新建 workspace 後的預設資料：定向/生活 各一筆 objectives + 各一組預設長期目標"""
+    with get_conn() as conn:
+        # objectives：兩類別各一筆
+        for cat in ("定向", "生活"):
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO objectives(workspace_id, category, target_date, teaching_goal)
+                VALUES(?, ?, ?, ?)
+                """,
+                (ws_id, cat, today_ymd(), "")
+            )
+
+            # long_term_groups：兩類別各至少一組
+            conn.execute(
+                """
+                INSERT INTO long_term_groups(workspace_id, category, long_term_goal, ord)
+                VALUES(?, ?, ?, ?)
+                """,
+                (ws_id, cat, "感官知覺/動作能力", 1)
+            )
+
+def cleanup_expired_workspaces() -> int:
+    cutoff = (datetime.now() - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            DELETE FROM workspaces
+            WHERE COALESCE(updated_at, created_at) < ?
+            """,
+            (cutoff,)
+        )
+    return cur.rowcount
+
 init_db()
 
 # ---------- Routes ----------
@@ -152,38 +347,44 @@ init_db()
 def home():
     return render_template("home.html")
 
+@app.route("/student", methods=["GET", "POST"])
+def student():
+    if request.method == "GET":
+        nxt = request.args.get("next", "objectives")
+        return render_template("student.html", next=nxt)
+
+    nxt = request.form.get("next", "objectives")
+    student_name = request.form.get("student_name", "").strip()
+    agency = request.form.get("agency", "").strip()
+
+    if not student_name or not agency:
+        flash("請填學員姓名與派案單位。")
+        return redirect(url_for("student", next=nxt))
+
+    ws = find_workspace_by_student(student_name, agency)
+
+    if not ws:
+        try:
+            ws = create_workspace(student_name, agency)
+            init_workspace_defaults(ws["id"])
+        except sqlite3.IntegrityError:
+            ws = find_workspace_by_student(student_name, agency)
+
+    # 只在「新建成功」時提示代碼（避免每次進來都跳 modal）
+    if session.get("last_code") != ws["code"]:
+        session["last_code"] = ws["code"]
+        session["code_ack"] = False
+
+    # 導向你原本的頁面
+    if nxt == "records":
+        return redirect(url_for("records", code=ws["code"]))
+    return redirect(url_for("objectives", code=ws["code"]))
 
 @app.route("/new/<module>")
 def new_module(module: str):
     if module not in ("objectives", "records"):
         return redirect(url_for("home"))
-
-    ws = create_workspace()
-    session["last_code"] = ws["code"]
-    session["code_ack"] = False
-
-    # 建立 objectives 預設資料 + 預設一組長期目標群組
-    with get_conn() as conn:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO objectives(workspace_id, target_date, teaching_goal, category)
-            VALUES(?, ?, ?, ?)
-            """,
-            (ws["id"], today_ymd(), "", "定向")
-        )
-        conn.execute(
-            """
-            INSERT INTO long_term_groups(workspace_id, long_term_goal, ord)
-            VALUES(?, ?, ?)
-            """,
-            (ws["id"], "感官知覺/動作能力", 1)
-        )
-
-    flash(f"已建立新草稿，代碼：{ws['code']}（請記下來方便「繼續未完成」）")
-
-    if module == "objectives":
-        return redirect(url_for("objectives", code=ws["code"]))
-    return redirect(url_for("records", code=ws["code"]))
+    return redirect(url_for("student", next=module))
 
 @app.route("/continue/<module>", methods=["GET", "POST"])
 def continue_module(module: str):
@@ -202,26 +403,27 @@ def continue_module(module: str):
 
     return render_template("code.html", module=module)
 
-
 @app.route("/objectives/<code>", methods=["GET", "POST"])
 def objectives(code: str):
+    # 用同一個 key：cat（GET/POST 都吃）
+    cat = (request.args.get("cat") or request.form.get("cat") or "定向").strip()
+    if cat not in ("定向", "生活"):
+        cat = "定向"
+
     ws = get_workspace_by_code(code)
     if not ws:
         flash("找不到這個代碼。")
         return redirect(url_for("home"))
 
     ws_id = ws["id"]
-    obj = get_objectives(ws_id)
+    obj = get_objectives(ws_id, cat)
 
     if request.method == "POST":
         target_date = (request.form.get("target_date") or today_ymd()).strip()
         teaching_goal = (request.form.get("teaching_goal") or "").strip()
-        category = (request.form.get("category") or "定向").strip()
-        if category not in ("定向", "生活"):
-            category = "定向"
 
         # 解析多個長期目標群組：long_term_goal_0, long_term_goal_1, ...
-        group_idxs = []
+        group_idxs: list[int] = []
         for k in request.form.keys():
             m = re.match(r"^long_term_goal_(\d+)$", k)
             if m:
@@ -230,9 +432,9 @@ def objectives(code: str):
 
         if not group_idxs:
             flash("至少需要一個長期目標。")
-            return redirect(url_for("objectives", code=code))
+            return redirect(url_for("objectives", code=code, cat=cat))
 
-        groups_payload = []
+        groups_payload: list[tuple[str, list[str]]] = []
         for idx in group_idxs:
             lt = (request.form.get(f"long_term_goal_{idx}") or "").strip()
             if not lt:
@@ -243,52 +445,67 @@ def objectives(code: str):
 
         if not groups_payload:
             flash("長期目標不可全空白。")
-            return redirect(url_for("objectives", code=code))
+            return redirect(url_for("objectives", code=code, cat=cat))
 
         with get_conn() as conn:
+            ts = now_iso()
+
+            # objectives：同一個 ws 允許 定向/生活 各一筆
             conn.execute(
                 """
-                INSERT INTO objectives(workspace_id, target_date, teaching_goal, category)
+                INSERT INTO objectives(workspace_id, category, target_date, teaching_goal)
                 VALUES(?, ?, ?, ?)
-                ON CONFLICT(workspace_id) DO UPDATE SET
+                ON CONFLICT(workspace_id, category) DO UPDATE SET
                   target_date=excluded.target_date,
-                  teaching_goal=excluded.teaching_goal,
-                  category=excluded.category
+                  teaching_goal=excluded.teaching_goal
                 """,
-                (ws_id, target_date, teaching_goal, category)
+                (ws_id, cat, target_date, teaching_goal)
             )
 
-            # 清掉舊群組與短期目標（foreign key cascade 會清 short_terms）
-            conn.execute("DELETE FROM long_term_groups WHERE workspace_id=?", (ws_id,))
+            # ✅ 只清掉本 cat 的群組（一定要在迴圈外）
+            conn.execute(
+                "DELETE FROM long_term_groups WHERE workspace_id=? AND category=?",
+                (ws_id, cat)
+            )
 
-            # 重建群組 + 其短期目標
+            # ✅ 重建群組 + short_terms
             for ord_idx, (lt, sts) in enumerate(groups_payload, start=1):
                 cur = conn.execute(
-                    "INSERT INTO long_term_groups(workspace_id, long_term_goal, ord) VALUES(?, ?, ?)",
-                    (ws_id, lt, ord_idx)
+                    """
+                    INSERT INTO long_term_groups(workspace_id, category, long_term_goal, ord)
+                    VALUES(?, ?, ?, ?)
+                    """,
+                    (ws_id, cat, lt, ord_idx)
                 )
                 group_id = cur.lastrowid
+
                 for st_ord, item in enumerate(sts, start=1):
                     conn.execute(
                         "INSERT INTO short_terms(group_id, item, ord) VALUES(?, ?, ?)",
                         (group_id, item, st_ord)
                     )
 
-        flash("已儲存：教學目標（含多組長期/短期目標）")
-        return redirect(url_for("objectives", code=code))
+            conn.execute(
+                "UPDATE workspaces SET updated_at=? WHERE id=?",
+                (ts, ws_id)
+            )
 
-    # GET：拉群組與各群組短期目標
-    groups = get_long_term_groups(ws_id)
+        flash(f"已儲存：教學目標（{cat}）")
+        return redirect(url_for("objectives", code=code, cat=cat))
+
+    # GET
+    groups = get_long_term_groups(ws_id, cat)
     st_map = get_short_terms_by_group_ids([g["id"] for g in groups])
 
     return render_template(
         "objectives.html",
         code=code,
+        cat=cat,
+        ws=ws,
         obj=obj,
         groups=groups,
         st_map=st_map
     )
-
 
 @app.route("/records/<code>", methods=["GET", "POST"])
 def records(code: str):
@@ -296,6 +513,10 @@ def records(code: str):
     if not ws:
         flash("找不到這個代碼。")
         return redirect(url_for("home"))
+
+    cat = (request.args.get("cat") or request.form.get("cat") or "定向").strip()
+    if cat not in ("定向", "生活"):
+        cat = "定向"
 
     ws_id = ws["id"]
 
@@ -309,88 +530,98 @@ def records(code: str):
 
             if not teach_time:
                 flash("教學時間不可空白（例如：14:00-16:00）。")
-                return redirect(url_for("records", code=code))
+                return redirect(url_for("records", code=code, cat=cat))
 
+            ts = now_iso()
             with get_conn() as conn:
                 conn.execute(
                     """
-                    INSERT INTO records(workspace_id, teach_date, teach_time, effectiveness, created_at)
-                    VALUES(?, ?, ?, ?, ?)
+                    INSERT INTO records(workspace_id, category, teach_date, teach_time, effectiveness, created_at)
+                    VALUES(?, ?, ?, ?, ?, ?)
                     """,
-                    (ws_id, teach_date, teach_time, effectiveness, now_iso())
+                    (ws_id, cat, teach_date, teach_time, effectiveness, ts)
                 )
+                conn.execute("UPDATE workspaces SET updated_at=? WHERE id=?", (ts, ws_id))
+
             flash("已新增一筆教學記錄。")
-            return redirect(url_for("records", code=code))
+            return redirect(url_for("records", code=code, cat=cat))
 
         if action == "delete":
             rec_id = (request.form.get("rec_id") or "").strip()
             if rec_id.isdigit():
                 with get_conn() as conn:
                     conn.execute(
-                        "DELETE FROM records WHERE id=? AND workspace_id=?",
-                        (int(rec_id), ws_id)
+                        "DELETE FROM records WHERE id=? AND workspace_id=? AND category=?",
+                        (int(rec_id), ws_id, cat)
                     )
                 flash("已刪除該筆記錄。")
-            return redirect(url_for("records", code=code))
 
-    recs = get_records(ws_id)
-    return render_template("records.html", code=code, records=recs, today=today_ymd())
+            return redirect(url_for("records", code=code, cat=cat))
 
+    recs = get_records(ws_id, cat)
+    return render_template(
+        "records.html",
+        code=code,
+        ws=ws,
+        records=recs,
+        today=today_ymd(),
+        category=cat
+    )
 
-def build_export_text(ws_id: int) -> str:
-    obj = get_objectives(ws_id)  # ✅ 把 objectives 抓出來
-    groups = get_long_term_groups(ws_id)
-    st_map = get_short_terms_by_group_ids([g["id"] for g in groups])
-    recs = get_records(ws_id)
-
+def build_export_text(ws_id: int, category: str) -> str:
     lines: list[str] = []
 
-    # ===== 教學目標 =====
-    lines.append("【教學目標】")
+    def one(cat: str):
+        obj = get_objectives(ws_id, cat)
+        groups = get_long_term_groups(ws_id, cat)
+        st_map = get_short_terms_by_group_ids([g["id"] for g in groups])
+        recs = get_records(ws_id, cat)
 
-    # (A) 目標基本資料（日期/類別/文字）
-    if obj:
-        # 你 objectives 表裡欄位是 target_date / category / teaching_goal
-        lines.append(f"訂定日期：{obj['target_date']}")
-        lines.append(f"類別：{obj['category']}")
-        lines.append("教學目標：")
-        lines.append(obj["teaching_goal"] or "（未填）")
-    else:
-        lines.append("（尚未填寫教學目標基本資料）")
-
-    lines.append("")  # 空行分隔
-
-    # (B) 長期/短期目標群組
-    lines.append("長期目標與短期目標：")
-    if groups:
-        for i, g in enumerate(groups, start=1):
-            lines.append(f"長期目標{i}. {g['long_term_goal']}")
-            sts = st_map.get(g["id"], [])
-            if sts:
-                for j, st in enumerate(sts, start=1):
-                    # ✅ 你要的格式：只留數字，不要「短期目標」四字
-                    lines.append(f"  {j}. {st['item']}")
-            else:
-                lines.append("  （未填短期目標）")
-            lines.append("")
-    else:
-        lines.append("（未填長期/短期目標）")
+        lines.append(f"【教學目標｜{cat}】")
+        if obj:
+            lines.append(f"訂定日期：{obj['target_date']}")
+            lines.append("教學目標：")
+            lines.append(obj["teaching_goal"] or "（未填）")
+        else:
+            lines.append("（尚未填寫）")
         lines.append("")
 
-    # ===== 教學記錄 =====
-    lines.append("【教學記錄】")
-    if not recs:
-        lines.append("（尚未新增）")
-    else:
-        for idx, r in enumerate(recs, start=1):
-            lines.append(f"第{idx}次")
-            lines.append(f"教學日期：{r['teach_date']}")
-            lines.append(f"教學時間：{r['teach_time']}")
-            lines.append("教學成效評估：")
-            lines.append(r["effectiveness"] or "")
-            lines.append("")  # 分隔
+        lines.append("長期目標與短期目標：")
+        if groups:
+            for i, g in enumerate(groups, start=1):
+                lines.append(f"長期目標{i}. {g['long_term_goal']}")
+                sts = st_map.get(g["id"], [])
+                if sts:
+                    for j, st in enumerate(sts, start=1):
+                        lines.append(f"  {j}. {st['item']}")
+                else:
+                    lines.append("  （未填短期目標）")
+                lines.append("")
+        else:
+            lines.append("（未填長期/短期目標）")
+            lines.append("")
 
-    lines.append("")
+        lines.append(f"【教學記錄｜{cat}】")
+        if not recs:
+            lines.append("（尚未新增）")
+        else:
+            for idx, r in enumerate(recs, start=1):
+                lines.append(f"第{idx}次")
+                lines.append(f"教學日期：{r['teach_date']}")
+                lines.append(f"教學時間：{r['teach_time']}")
+                lines.append("教學成效評估：")
+                lines.append(r["effectiveness"] or "")
+                lines.append("")
+        lines.append("")
+        lines.append("========")
+        lines.append("")
+
+    if category == "both":
+        one("定向")
+        one("生活")
+    else:
+        one(category)
+
     return "\n".join(lines)
 
 @app.route("/export/<code>")
@@ -400,21 +631,36 @@ def export(code: str):
         flash("找不到這個代碼。")
         return redirect(url_for("home"))
 
+    cat = (request.args.get("category") or "定向").strip()
+    if cat not in ("定向", "生活", "both"):
+        cat = "定向"
+
     ws_id = ws["id"]
-    obj = get_objectives(ws_id)
-    date_for_name = obj["target_date"] if obj else today_ymd()
+    # 檔名日期：定向/生活取自己的；both 取「有填的那個」(優先定向，沒有就生活)
+    if cat == "both":
+        obj_a = get_objectives(ws_id, "定向")
+        obj_b = get_objectives(ws_id, "生活")
+
+        dates = []
+        if obj_a: dates.append(obj_a["target_date"])
+        if obj_b: dates.append(obj_b["target_date"])
+
+        date_for_name = max(dates) if dates else today_ymd()
+    else:
+        obj = get_objectives(ws_id, cat)
+        date_for_name = obj["target_date"] if obj else today_ymd()
+
     ymd = date_for_name.replace("-", "")
 
     student = safe_name(ws["student_name"] or "未填姓名")
-    filename = f"{ymd}_{student}_{ws['code']}.txt"
-    
-    text = build_export_text(ws_id).encode("utf-8-sig")  # utf-8-sig 讓 Windows 記事本不亂碼
+    filename = f"{ymd}_{student}_{cat}_{ws['code']}.txt"
 
+    text = build_export_text(ws_id, cat).encode("utf-8-sig")
     return send_file(
         BytesIO(text),
         as_attachment=True,
         download_name=filename,
-        mimetype="text/plain; charset=utf-8"
+        mimetype="text/plain; charset=utf-8",
     )
 
 def safe_name(s: str) -> str:
@@ -432,7 +678,8 @@ def ack_code():
 
 @app.post("/api/delete-workspace")
 def api_delete_workspace():
-    code = (request.form.get("code") or request.json.get("code") if request.is_json else "").strip()
+    data = request.get_json(silent=True) or {}
+    code = (request.form.get("code") or data.get("code") or "").strip()
     if not code:
         return jsonify({"ok": False, "error": "missing code"}), 400
 
@@ -440,9 +687,15 @@ def api_delete_workspace():
         ws = conn.execute("SELECT id FROM workspaces WHERE code=?", (code,)).fetchone()
         if not ws:
             return jsonify({"ok": False, "error": "not found"}), 404
-
         conn.execute("DELETE FROM workspaces WHERE id=?", (ws["id"],))
     return jsonify({"ok": True})
+
+try:
+    n = cleanup_expired_workspaces()
+    if n:
+        print(f"[cleanup] removed {n} workspaces")
+except Exception as e:
+    print("[cleanup] failed:", e)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

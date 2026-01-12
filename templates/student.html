@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h1>新增／選擇學員</h1>
+  <p class="hint">
+    請先輸入學員姓名與派案單位。
+    系統會自動找到既有草稿，或為此學員建立新的 6 位代碼。
+  </p>
+
+  <form method="post" class="form" aria-labelledby="studentFormTitle">
+    <input type="hidden" name="next" value="{{ next }}" />
+
+    <label class="label" for="student_name">學員姓名（全名）</label>
+    <input
+      id="student_name"
+      name="student_name"
+      class="input"
+      required
+      autocomplete="name"
+      placeholder="請務必填全名"
+    />
+
+    <label class="label" for="agency">派案單位</label>
+    <input
+      id="agency"
+      name="agency"
+      class="input"
+      required
+      autocomplete="organization"
+      placeholder="可填全名或簡稱"
+    />
+
+    <div class="btnrow">
+      <button class="btn btn-primary" type="submit">下一步</button>
+      <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

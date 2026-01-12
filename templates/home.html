@@ -18,7 +18,7 @@
     <div class="panel">
       <h2>🎯 教學目標</h2>
       <div class="btnrow">
-        <a class="btn" href="{{ url_for('new_module', module='objectives') }}">新增目標</a>
+        <a class="btn" href="{{ url_for('student', next='objectives') }}">新增目標</a>
         <a class="btn btn-secondary" href="{{ url_for('continue_module', module='objectives') }}">繼續未完成</a>
       </div>
     </div>
@@ -26,7 +26,7 @@
     <div class="panel">
       <h2>📝 教學記錄</h2>
       <div class="btnrow">
-        <a class="btn" href="{{ url_for('new_module', module='records') }}">新增記錄</a>
+        <a class="btn" href="{{ url_for('student', next='records') }}">新增記錄</a>
         <a class="btn btn-secondary" href="{{ url_for('continue_module', module='records') }}">繼續未完成</a>
       </div>
     </div>

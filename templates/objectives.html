@@ -8,21 +8,37 @@
   </div>
 
   <div class="btnrow">
+    <a class="btn {{ '' if cat=='定向' else 'btn-secondary' }}"
+       href="{{ url_for('objectives', code=code, cat='定向') }}">定向</a>
+
+    <a class="btn {{ '' if cat=='生活' else 'btn-secondary' }}"
+       href="{{ url_for('objectives', code=code, cat='生活') }}">生活</a>
+
+    <a class="btn btn-secondary"
+       href="{{ url_for('export', code=code, cat='both') }}">下載 both</a>
+  </div>
+
+  <p class="hint">目前編輯：<strong>{{ cat }}</strong></p>
+
+  <div class="btnrow">
     <a class="btn btn-secondary" href="{{ url_for('home') }}">回首頁</a>
     <button class="btn btn-secondary"
         type="button"
         id="downloadBtn"
         data-code="{{ code }}"
-        data-download-url="{{ url_for('export', code=code) }}"
+        data-download-url="{{ url_for('export', code=code, cat=cat) }}"
         data-home-url="{{ url_for('home') }}">
       下載（同檔含目標+記錄）
     </button>
-    <a class="btn" href="{{ url_for('records', code=code) }}">前往教學記錄 ➡️</a>
+    <a class="btn" href="{{ url_for('records', code=code, cat=cat) }}">前往教學記錄 ➡️</a>
   </div>
 </section>
 
 <section class="card">
   <form method="post" class="form" id="objForm">
+
+    <input type="hidden" name="cat" value="{{ cat }}">
+
     <label class="label" for="target_date">訂定日期（年月日）</label>
     <input id="target_date" name="target_date" class="input" type="date"
            value="{{ obj['target_date'] if obj else '' }}" required />
@@ -31,11 +47,7 @@
     <textarea id="teaching_goal" name="teaching_goal" class="textarea" rows="4"
       placeholder="例如：提升道路穿越安全判斷、建立手杖節奏...">{{ obj['teaching_goal'] if obj else '' }}</textarea>
 
-    <label class="label" for="category">教學類別</label>
-    <select id="category" name="category" class="select">
-      <option value="定向" {{ 'selected' if obj and obj['category']=='定向' else '' }}>定向</option>
-      <option value="生活" {{ 'selected' if obj and obj['category']=='生活' else '' }}>生活</option>
-    </select>
+    <p class="hint">教學類別：<strong>{{ cat }}</strong></p>
 
     <hr class="hr"/>
 
