@@ -47,7 +47,11 @@
     <textarea id="teaching_goal" name="teaching_goal" class="textarea" rows="4"
       placeholder="例如：提升道路穿越安全判斷、建立手杖節奏...">{{ obj['teaching_goal'] if obj else '' }}</textarea>
 
-    <p class="hint">教學類別：<strong>{{ cat }}</strong></p>
+    <label class="label" for="category">教學類別</label>
+    <select id="category" name="category" class="select">
+      <option value="定向" {{ 'selected' if obj and obj['category']=='定向' else '' }}>定向</option>
+      <option value="生活" {{ 'selected' if obj and obj['category']=='生活' else '' }}>生活</option>
+    </select>
 
     <hr class="hr"/>
 
