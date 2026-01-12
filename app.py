@@ -210,6 +210,24 @@ def now_iso() -> str:
 def today_ymd() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
+def pick_latest_ymd(*dates: str) -> str:
+    """
+    傳入多個 'YYYY-MM-DD'，回傳較新的那個。
+    允許空字串/None（會自動忽略）。
+    都沒有就回傳 today_ymd()。
+    """
+    valid: list[str] = []
+    for d in dates:
+        if d and isinstance(d, str):
+            d = d.strip()
+            if d:
+                valid.append(d)
+
+    if not valid:
+        return today_ymd()
+
+    # YYYY-MM-DD 的字典序 == 時間序（可直接 max）
+    return max(valid)
 
 def make_code() -> str:
     # 6 位數碼，避免太長；如重複就重生
@@ -565,7 +583,7 @@ def records(code: str):
         ws=ws,
         records=recs,
         today=today_ymd(),
-        category=cat
+        cat=cat
     )
 
 def build_export_text(ws_id: int, category: str) -> str:
@@ -613,11 +631,11 @@ def build_export_text(ws_id: int, category: str) -> str:
                 lines.append(r["effectiveness"] or "")
                 lines.append("")
         lines.append("")
-        lines.append("========")
-        lines.append("")
 
     if category == "both":
         one("定向")
+        lines.append("========")  # ✅ 只在中間分隔一次
+        lines.append("")
         one("生活")
     else:
         one(category)
@@ -636,23 +654,26 @@ def export(code: str):
         cat = "定向"
 
     ws_id = ws["id"]
-    # 檔名日期：定向/生活取自己的；both 取「有填的那個」(優先定向，沒有就生活)
+
     if cat == "both":
         obj_a = get_objectives(ws_id, "定向")
         obj_b = get_objectives(ws_id, "生活")
 
-        dates = []
-        if obj_a: dates.append(obj_a["target_date"])
-        if obj_b: dates.append(obj_b["target_date"])
-
-        date_for_name = max(dates) if dates else today_ymd()
+        date_for_name = pick_latest_ymd(
+            obj_a["target_date"] if obj_a else "",
+            obj_b["target_date"] if obj_b else "",
+        )
     else:
         obj = get_objectives(ws_id, cat)
-        date_for_name = obj["target_date"] if obj else today_ymd()
+        date_for_name = (obj["target_date"] if obj else today_ymd())
 
     ymd = date_for_name.replace("-", "")
 
-    student = safe_name(ws["student_name"] or "未填姓名")
+    # sqlite3.Row 取值別用 .get
+    student_raw = ws["student_name"] if "student_name" in ws.keys() else ""
+    student = safe_name(student_raw) or "未填姓名"
+
+    # cat 直接用原字串（定向/生活/both），不要 safe_name(cat)
     filename = f"{ymd}_{student}_{cat}_{ws['code']}.txt"
 
     text = build_export_text(ws_id, cat).encode("utf-8-sig")
@@ -664,8 +685,14 @@ def export(code: str):
     )
 
 def safe_name(s: str) -> str:
-    # 讓檔名乾淨（把不適合的字元換掉）
-    return "".join(ch if ch.isalnum() or ch in " _-." or "\u4e00" <= ch <= "\u9fff" else "_" for ch in s).strip() or "未填姓名"
+    s = (s or "").strip()
+    # Windows 檔名禁用字元先換成底線
+    s = re.sub(r'[\\/:*?"<>|]+', "_", s)
+    # 空白變底線
+    s = re.sub(r"\s+", "_", s)
+    # 只保留：中英數、底線、連字號、點
+    s = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff._-]+", "", s)
+    return s.strip("._-")[:80]
 
 @app.route("/ack-code", methods=["POST"])
 def ack_code():

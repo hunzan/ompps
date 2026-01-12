@@ -427,3 +427,28 @@ html[data-theme="dark"] .btn-primary{
 html[data-theme="dark"] #closeCodeBtn{
   color: #fff !important;
 }
+/* ===== Category Switch Buttons ===== */
+.btn-cat-om {
+  background: #1f6feb;
+  color: #fff;
+}
+.btn-cat-om:hover { background: #185ac0; }
+
+.btn-cat-life {
+  background: #2da44e;
+  color: #fff;
+}
+.btn-cat-life:hover { background: #248543; }
+
+.btn-cat-both {
+  background: #f0883e;
+  color: #000;
+  font-weight: 600;
+}
+.btn-cat-both:hover { background: #e16f23; }
+
+/* 未選中狀態淡化 */
+.btn-cat-off {
+  background: #e5e7eb;
+  color: #333;
+}

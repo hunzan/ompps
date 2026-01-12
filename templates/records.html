@@ -7,17 +7,24 @@
     <div class="badge">代碼：<strong>{{ code }}</strong></div>
   </div>
 
-  <!-- 類別切換 + 下載 both -->
   <div class="btnrow">
-    <a class="btn {{ '' if cat=='定向' else 'btn-secondary' }}"
+    <a class="btn {{ 'btn-cat-om' if cat=='定向' else 'btn-cat-off' }}"
        href="{{ url_for('records', code=code, cat='定向') }}">定向</a>
 
-    <a class="btn {{ '' if cat=='生活' else 'btn-secondary' }}"
+    <a class="btn {{ 'btn-cat-life' if cat=='生活' else 'btn-cat-off' }}"
        href="{{ url_for('records', code=code, cat='生活') }}">生活</a>
 
-    <a class="btn btn-secondary"
-       href="{{ url_for('export', code=code, cat='both') }}">下載 both</a>
+    <button class="btn btn-cat-both"
+            type="button"
+            data-download
+            data-code="{{ code }}"
+            data-download-url="{{ url_for('export', code=code, cat='both') }}"
+            data-home-url="{{ url_for('home') }}">
+      下載 both
+    </button>
   </div>
+
+  <p class="hint">目前編輯：<strong>{{ cat }}</strong></p>
 
   <!-- 導航 + 本類別下載 -->
   <div class="btnrow">
@@ -25,11 +32,11 @@
 
     <button class="btn btn-secondary"
             type="button"
-            id="downloadBtn"
+            data-download
             data-code="{{ code }}"
             data-download-url="{{ url_for('export', code=code, cat=cat) }}"
             data-home-url="{{ url_for('home') }}">
-      下載（同檔含目標+記錄）
+      下載本類別（同檔含目標+記錄）
     </button>
 
     <a class="btn" href="{{ url_for('objectives', code=code, cat=cat) }}">⬅️ 前往教學目標</a>

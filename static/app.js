@@ -259,19 +259,23 @@
 })();
 // ---- After download modal (Step 3) ----
 (function(){
-  const downloadBtn = document.getElementById("downloadBtn");
-  if (!downloadBtn) return; // 不是每頁都有下載按鈕
-
-  const code = (downloadBtn.getAttribute("data-code") || "").trim();
-  const dlUrl = downloadBtn.getAttribute("data-download-url") || "";
-  const homeUrl = downloadBtn.getAttribute("data-home-url") || "/";
+  const downloadBtns = document.querySelectorAll("[data-download]");
+  if (!downloadBtns.length) return; // 不是每頁都有下載按鈕
 
   const backdrop = document.getElementById("afterDownloadBackdrop");
   const modal = document.getElementById("afterDownloadModal");
   const keepBtn = document.getElementById("keepAfterDownloadBtn");
   const delBtn = document.getElementById("deleteAfterDownloadBtn");
+  const codeShow = document.getElementById("afterDownloadCode");
 
-  function openModal(){
+  let currentCode = "";
+  let currentHomeUrl = "/";
+  let lastFocusEl = null;
+
+  function openModal(code){
+    currentCode = code || "";
+    if (codeShow) codeShow.textContent = currentCode;
+
     if (backdrop) backdrop.style.display = "block";
     if (modal) modal.style.display = "grid";
     delBtn?.focus();
@@ -280,56 +284,86 @@
   function closeModal(){
     if (backdrop) backdrop.style.display = "none";
     if (modal) modal.style.display = "none";
-    downloadBtn.focus();
+    if (lastFocusEl && typeof lastFocusEl.focus === "function") lastFocusEl.focus();
   }
 
-    downloadBtn.addEventListener("click", async () => {
-      if (!dlUrl) return;
+  async function doDownload(btn){
+    const code = (btn.getAttribute("data-code") || "").trim();
+    const dlUrl = btn.getAttribute("data-download-url") || "";
+    const homeUrl = btn.getAttribute("data-home-url") || "/";
+    currentHomeUrl = homeUrl;
 
-      // 按鈕鎖定，避免連點重複下載
-      const oldText = downloadBtn.textContent;
-      downloadBtn.disabled = true;
-      downloadBtn.textContent = "下載中…";
+    if (!dlUrl) return;
 
-      try{
-        const res = await fetch(dlUrl, { method: "GET" });
-        if (!res.ok) throw new Error("download failed");
+    // 鎖定避免連點
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "下載中…";
 
-        // 嘗試從 Content-Disposition 抓檔名（抓不到就用預設）
-        let filename = "";
-        const cd = res.headers.get("Content-Disposition") || "";
-        const m = cd.match(/filename\*?=(?:UTF-8''|")?([^\";]+)/i);
-        if (m && m[1]) filename = decodeURIComponent(m[1].replace(/"/g, "").trim());
-        if (!filename) filename = `OMpps_${code || "draft"}.txt`;
+    try{
+      const res = await fetch(dlUrl, { method: "GET" });
+      if (!res.ok) throw new Error("download failed");
 
-        const blob = await res.blob();
+    // 嘗試從 Content-Disposition 抓檔名（支援中文）
+    function getFilenameFromContentDisposition(cd){
+      if (!cd) return "";
 
-        // 觸發下載
-        const a = document.createElement("a");
-        const blobUrl = URL.createObjectURL(blob);
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
-
-        // ✅ 下載成功後才詢問是否刪除
-        openModal();
-
-      }catch(e){
-        alert("下載失敗，請稍後再試。");
-      }finally{
-        downloadBtn.disabled = false;
-        downloadBtn.textContent = oldText;
+      // 1) RFC 5987: filename*=UTF-8''....
+      let m = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+      if (m && m[1]) {
+        try { return decodeURIComponent(m[1].trim()); } catch {}
+        return m[1].trim();
       }
+
+      // 2) fallback: filename="..." 或 filename=...
+      m = cd.match(/filename\s*=\s*"([^"]+)"/i);
+      if (m && m[1]) return m[1].trim();
+
+      m = cd.match(/filename\s*=\s*([^;]+)/i);
+      if (m && m[1]) return m[1].trim();
+
+      return "";
+    }
+
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = getFilenameFromContentDisposition(cd);
+    if (!filename) filename = `OMpps_${code || "draft"}.txt`;
+
+      const blob = await res.blob();
+
+      const a = document.createElement("a");
+      const blobUrl = URL.createObjectURL(blob);
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+
+      // ✅ 下載成功才開 modal
+      openModal(code);
+
+    }catch(e){
+      alert("下載失敗，請稍後再試。");
+    }finally{
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  }
+
+  downloadBtns.forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      lastFocusEl = btn;
+      await doDownload(btn);
     });
+  });
 
   keepBtn?.addEventListener("click", closeModal);
   backdrop?.addEventListener("click", closeModal);
 
   delBtn?.addEventListener("click", async () => {
-    if (!code){
+    if (!currentCode){
       alert("找不到代碼，無法刪除。");
       return;
     }
@@ -337,11 +371,11 @@
       const res = await fetch("/api/delete-workspace", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ code })
+        body: JSON.stringify({ code: currentCode })
       });
       if (res.ok){
         alert("已刪除草稿 ✅");
-        window.location.href = homeUrl;
+        window.location.href = currentHomeUrl;
       } else {
         alert("刪除失敗，請稍後再試。");
       }
