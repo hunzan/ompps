@@ -8,14 +8,18 @@
   </div>
 
   <div class="btnrow">
-    <a class="btn {{ '' if cat=='定向' else 'btn-secondary' }}"
-       href="{{ url_for('objectives', code=code, cat='定向') }}">定向</a>
-
-    <a class="btn {{ '' if cat=='生活' else 'btn-secondary' }}"
-       href="{{ url_for('objectives', code=code, cat='生活') }}">生活</a>
+    <a class="btn btn-secondary"
+       href="{{ url_for('objectives', code=code, cat='定向') }}"
+       data-switch-cat
+       data-cat="定向">定向</a>
 
     <a class="btn btn-secondary"
-       href="{{ url_for('export', code=code, cat='both') }}">下載 both</a>
+       href="{{ url_for('objectives', code=code, cat='生活') }}"
+       data-switch-cat
+       data-cat="生活">生活</a>
+
+    <a class="btn btn-secondary"
+       href="{{ url_for('export', code=code, category='both') }}">下載 both</a>
   </div>
 
   <p class="hint">目前編輯：<strong>{{ cat }}</strong></p>
@@ -37,7 +41,7 @@
 <section class="card">
   <form method="post" class="form" id="objForm">
 
-    <input type="hidden" name="cat" value="{{ cat }}">
+    <input type="hidden" name="cat" id="catHidden" value="{{ cat }}">
 
     <label class="label" for="target_date">訂定日期（年月日）</label>
     <input id="target_date" name="target_date" class="input" type="date"
@@ -47,11 +51,7 @@
     <textarea id="teaching_goal" name="teaching_goal" class="textarea" rows="4"
       placeholder="例如：提升道路穿越安全判斷、建立手杖節奏...">{{ obj['teaching_goal'] if obj else '' }}</textarea>
 
-    <label class="label" for="category">教學類別</label>
-    <select id="category" name="category" class="select">
-      <option value="定向" {{ 'selected' if obj and obj['category']=='定向' else '' }}>定向</option>
-      <option value="生活" {{ 'selected' if obj and obj['category']=='生活' else '' }}>生活</option>
-    </select>
+    <p class="hint">目前編輯：<strong>{{ cat }}</strong></p>
 
     <hr class="hr"/>
 

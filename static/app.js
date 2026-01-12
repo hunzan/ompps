@@ -2,7 +2,9 @@
   const initial = (window.OMpps && window.OMpps.initial) ? window.OMpps.initial : { category: "定向" };
   const groupInit = (window.OMpps && window.OMpps.groupInit) ? window.OMpps.groupInit : [];
 
-  const categoryEl = document.getElementById("category");
+  // ✅ 新增：類別來源（先 hidden，再舊的 select）
+  const catHiddenEl = document.getElementById("catHidden");
+  const categoryEl = document.getElementById("category"); // 舊版才有
   const groupsEl = document.getElementById("groups");
   const addGroupBtn = document.getElementById("addLongTermGroup");
 
@@ -54,6 +56,15 @@
   document.getElementById("themeLight")?.addEventListener("click", () => applyTheme("light"));
   document.getElementById("themeDark")?.addEventListener("click", () => applyTheme("dark"));
 
+  // ✅ 取得目前類別：優先 hidden，否則 select，最後 fallback
+  function getCat(){
+    const v = (catHiddenEl && catHiddenEl.value) ? catHiddenEl.value.trim()
+            : (categoryEl && categoryEl.value) ? categoryEl.value.trim()
+            : (initial && initial.category) ? String(initial.category).trim()
+            : "定向";
+    return (v === "生活" || v === "定向") ? v : "定向";
+  }
+
   function fillSelect(selectEl, category, selectedValue){
     selectEl.innerHTML = "";
     const opts = LT[category] || LT["定向"];
@@ -78,20 +89,15 @@
   }
 
   function bindGroup(groupEl){
-    // 長期目標選單
     const selectEl = groupEl.querySelector(".longTermSelect");
-    const cat = categoryEl ? categoryEl.value : "定向";
+    const cat = getCat();
     const initLong = groupEl.getAttribute("data-init-long") || "";
     fillSelect(selectEl, cat, initLong);
 
-    // 刪除群組
     const removeGroupBtn = groupEl.querySelector("[data-remove-group]");
     removeGroupBtn?.addEventListener("click", () => {
       const groups = groupsEl.querySelectorAll(".group");
-      if (groups.length <= 1) {
-        // 至少保留一組
-        return;
-      }
+      if (groups.length <= 1) return;
       groupEl.remove();
     });
 
@@ -131,8 +137,8 @@
   }
 
   function refreshAllSelects(){
-    if (!groupsEl || !categoryEl) return;
-    const cat = categoryEl.value;
+    if (!groupsEl) return;
+    const cat = getCat();
     groupsEl.querySelectorAll(".group").forEach(groupEl => {
       const selectEl = groupEl.querySelector(".longTermSelect");
       const current = selectEl.value;
@@ -142,20 +148,37 @@
 
   // 初始化：套用 DB 帶來的每組長期目標值
   if (groupsEl){
-    // 把 init 值灌到 DOM，讓 bindGroup 讀到
     groupInit.forEach(x => {
       const el = groupsEl.querySelector(`.group[data-idx="${x.idx}"]`);
       if (el) el.setAttribute("data-init-long", x.longTerm || "");
     });
-
     groupsEl.querySelectorAll(".group").forEach(bindGroup);
   }
 
-  // 類別切換 -> 更新所有群組的選單（保留原本選值）
-  if (categoryEl){
-    if (!categoryEl.value) categoryEl.value = initial.category || "定向";
-    categoryEl.addEventListener("change", refreshAllSelects);
-  }
+  // ✅ 如果你還保留舊版 select#category，仍可支援 change
+  categoryEl?.addEventListener("change", () => {
+    // 同步 hidden（如果兩者同時存在）
+    if (catHiddenEl) catHiddenEl.value = categoryEl.value;
+    refreshAllSelects();
+  });
+
+  // ✅ 關鍵：按上方「定向/生活」按鈕時，如果你不想換頁，也可即時切換選單
+  // 目前你的按鈕是 href 直接換頁，所以「換頁後」會自然套用新 catHidden
+  // 但如果你之後想做成不換頁，可打開這段 preventDefault 即時切換：
+  document.querySelectorAll("[data-switch-cat]").forEach(a => {
+    a.addEventListener("click", (e) => {
+      // 如果你希望「仍然換頁」，把下面兩行註解掉即可
+      // e.preventDefault();
+      // history.replaceState(null, "", a.getAttribute("href"));
+
+      const toCat = (a.getAttribute("data-cat") || "").trim();
+      if (toCat === "定向" || toCat === "生活") {
+        if (catHiddenEl) catHiddenEl.value = toCat;
+        if (categoryEl) categoryEl.value = toCat;
+        refreshAllSelects();
+      }
+    });
+  });
 
   // 新增長期目標群組
   addGroupBtn?.addEventListener("click", () => {
@@ -193,7 +216,7 @@
     bindGroup(group);
     group.querySelector("select")?.focus();
   });
-  // ---- Force Code Modal ----
+    // ---- Force Code Modal ----
   const copyBtn = document.getElementById("copyCodeBtn");
   const ackBtn = document.getElementById("ackCodeBtn");
   const codeEl = document.getElementById("codeValue");

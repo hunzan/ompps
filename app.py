@@ -631,7 +631,7 @@ def export(code: str):
         flash("找不到這個代碼。")
         return redirect(url_for("home"))
 
-    cat = (request.args.get("category") or "定向").strip()
+    cat = (request.args.get("cat") or request.args.get("category") or "定向").strip()
     if cat not in ("定向", "生活", "both"):
         cat = "定向"
 
